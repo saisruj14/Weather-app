@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Weather Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/css/weather-style.css">
+
+    <style>
+        /* Custom CSS to reduce the font size of the date column */
+        .date-cell {
+            font-size: 0.85rem; /* Adjust the size as needed */
+            white-space: nowrap; /* Prevents wrapping */
+            min-width: 100px; /* Minimum width to fit the date */
+        }
+
+        /* Max Temp Trends Section */
+        #tempTrendChart {
+            border-radius: 0.5rem; /* Rounded corners */
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); /* Shadow for depth */
+            margin-top: 20px; /* Space above */
+        }
+
+        .chart-title {
+            font-size: 1.5rem; /* Title size */
+            margin-bottom: 15px; /* Space below title */
+            color: #343a40; /* Darker title color */
+            font-weight: 600; /* Bold title */
+        }
+
+        /* Responsive Table Styles */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 24px; /* Adjust size for mobile */
+            }
+            .table th, .table td {
+                font-size: 12px; /* Adjust size for mobile */
+            }
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div class="container mt-5">
+    <h1 class="text-center mb-4">Real-Time Weather Monitoring Dashboard</h1>
+
+    <!-- Alerts Section -->
+    <div th:if="${alertTriggered}" class="alert alert-warning text-center">
+        <strong>Warning!</strong> High temperature alerts have been triggered in one or more cities.
+    </div>
+
+    <!-- Weather Summary Table -->
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped table-hover">
+            <thead class="table-dark">
+            <tr>
+                <th>City</th>
+                <th>Date</th>
+                <th>Avg Temp (°C)</th>
+                <th>Max Temp (°C)</th>
+                <th>Min Temp (°C)</th>
+                <th>Dominant Condition</th>
+                <th>Humidity (%)</th>
+                <th>Wind Speed (m/s)</th>
+                <th>Updated Time</th>
+                <th>Alert Triggered</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="summary : ${summaries}">
+                <td th:text="${summary.city != null ? summary.city : 'N/A'}"></td>
+                <td class="date-cell" th:text="${summary.date != null ? #temporals.format(summary.date, 'yyyy-MM-dd') : 'N/A'}"></td>
+                <td th:text="${summary.avgTemp != null ? #numbers.formatDecimal(summary.avgTemp, 2, 2) : '0.00'}"></td>
+                <td th:text="${summary.maxTemp != null ? #numbers.formatDecimal(summary.maxTemp, 2, 2) : '0.00'}"></td>
+                <td th:text="${summary.minTemp != null ? #numbers.formatDecimal(summary.minTemp, 2, 2) : '0.00'}"></td>
+                <td th:text="${summary.dominantCondition != null ? summary.dominantCondition : 'N/A'}"></td>
+                <td th:text="${summary.humidity != null ? summary.humidity : '0'}"></td>
+                <td th:text="${summary.windSpeed != null ? summary.windSpeed : '0.00'}"></td>
+                <td th:text="${summary.updatedTime != null ? #temporals.format(summary.updatedTime, 'HH:mm:ss') : 'N/A'}"></td>
+                <td>
+                    <span th:if="${summary.alertTriggered}" class="badge bg-danger">Alert Triggered</span>
+                    <span th:if="${!summary.alertTriggered}" class="badge bg-success">No Alert</span>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Temperature Trends Chart -->
+    <h2 class="chart-title text-center">Max Temperature Trends</h2>
+    <canvas id="tempTrendChart" class="mb-5"></canvas>
+</div>
+
+<!-- JS Libraries -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+
+<script th:inline="javascript">
+    document.addEventListener('DOMContentLoaded', function () {
+        // Parse the recentMaxTemps directly as JSON
+        const recentMaxTempsString = /*[[${recentMaxTemps}]]*/ '{}'; // Thymeleaf injects the string here
+        const recentMaxTemps = JSON.parse(recentMaxTempsString); // Convert JSON string to JS object
+        console.log(recentMaxTemps); // Check the data structure
+
+        // Define the cities based on the keys of the recentMaxTemps object
+        const cities = Object.keys(recentMaxTemps);
+
+        const labels = []; // Initialize an empty array for the labels (dates)
+        const today = new Date(); // Create a Date object for the current date and time
+        today.setHours(0, 0, 0, 0); // Set the time to midnight to avoid time zone issues
+
+// Loop to generate the last 5 days including today
+        for (let i = 3; i >= -1; i--) {
+            const date = new Date(today); // Create a new Date object based on today
+            date.setDate(today.getDate() - i); // Subtract 'i' days from today
+            labels.push(date.toISOString().split('T')[0]); // Convert date to ISO string and add it to the end of the array
+        }
+
+
+
+        // Prepare datasets for Chart.js
+        const datasets = cities.map((city) => {
+            return {
+                label: city,
+                data: recentMaxTemps[city], // This should be an array of temperatures
+                borderColor: `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 1)`,
+                backgroundColor: `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.2)`,
+                borderWidth: 2,
+                fill: true,
+                pointBackgroundColor: 'rgba(255, 99, 132, 1)',
+                pointBorderColor: '#fff',
+                tension: 0.4
+            };
+        });
+
+        // Ensure the chart is only created after the datasets are ready
+        try {
+            const ctx = document.getElementById('tempTrendChart').getContext('2d');
+            const tempTrendChart = new Chart(ctx, {
+                type: 'bar', // Change this to 'line' for a line chart
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: function (tooltipItems) {
+                                    const index = tooltipItems[0].dataIndex;
+                                    return labels[index];
+                                },
+                                label: function (tooltipItem) {
+                                    return `${tooltipItem.dataset.label}: ${tooltipItem.raw} °C`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Max Temp (°C)'
+                            },
+                            beginAtZero: false
+                        }
+                    }
+                }
+            });
+        } catch (error) {
+            console.error("Error rendering chart:", error);
+        }
+    });
+</script>
+
+</body>
+</html>
